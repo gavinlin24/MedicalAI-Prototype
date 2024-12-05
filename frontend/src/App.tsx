@@ -1,42 +1,69 @@
 import React, { useState } from "react";
-import Navbar from "./components/navbar/Navbar";
-import Homepage from "./components/Homepage";
-import SearchWindow from "./components/SearchWindow";
-import SearchContainer from "./components/SearchContainer";
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import PatientTable from "./components/PatientTable";
+import PatientDetails from "./components/PatientDetails";
+import PatientForm from "./components/PatientForm";
+import axios from "axios";
 
-const App = () => {
-  const [HomepageVisibility, setHomepageVisibility] = useState(true);
-  const [searchVisibility, setSearchVisibility] = useState(false);
-  const [displayResults, setDisplayResults] = useState(false);
-  const [searchData, setSearchData] = useState<any>(null);
+interface Patient {
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  acquisitionDate: string;
+}
+
+const App: React.FC = () => {
+  const [patients, setPatients] = useState<Patient[]>([]);
+
+  const fetchPatients = async (params: { [key: string]: string } = {}) => {
+    try {
+      const query = new URLSearchParams(params).toString();
+      const response = await axios.get(`http://localhost:8000/api/?${query}`);
+      const xmlData = response.data; // Assuming the response is the XML string.
+
+      // Parse the XML data
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlData, "application/xml");
+      const restingECGs = xmlDoc.getElementsByTagName("RestingECG");
+
+      // Map each <RestingECG> to a Patient object
+      const parsedPatients: Patient[] = Array.from(restingECGs).map((node) => {
+        const patientId = node.getElementsByTagName("patient_id")[0]?.textContent || "";
+        const firstName = node.getElementsByTagName("first_name")[0]?.textContent || "";
+        const lastName = node.getElementsByTagName("last_name")[0]?.textContent || "";
+        const acquisitionDate =
+          node.getElementsByTagName("acquisition_date")[0]?.textContent || "";
+
+        return {
+          patientId,
+          firstName,
+          lastName,
+          acquisitionDate,
+        };
+      });
+
+      // Update state with parsed patients
+      setPatients(parsedPatients);
+    } catch (error) {
+      console.error("Error fetching patients:", error);
+    }
+  };
 
   return (
-    <div className="container">
-      <Navbar
-        onLogoClick={() => {
-          setHomepageVisibility(true);
-          setSearchVisibility(false);
-          setDisplayResults(false);
-        }}
-        onSearchClick={() => {
-          setSearchVisibility(true);
-          setHomepageVisibility(false);
-          setDisplayResults(false);
-        }}
-      ></Navbar>
-      {HomepageVisibility && <Homepage />}
-      {searchVisibility && (
-        <SearchWindow
-          onSearchClick={(data) => {
-            setSearchData(data); 
-            setDisplayResults(true);
-          }}
+    <Router>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <div>
+              <PatientForm onSubmit={fetchPatients} />
+              <PatientTable patients={patients} />
+            </div>
+          }
         />
-      )}
-      {displayResults && searchData && (
-        <SearchContainer searchData={searchData} />
-      )}
-    </div>
+        <Route path="/patient/:patientId" element={<PatientDetails />} />
+      </Routes>
+    </Router>
   );
 };
 
